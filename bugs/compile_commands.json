@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/visual/Documents/CUDA/bugs/build",
+  "command": "/opt/cuda/bin/nvcc -forward-unknown-to-host-compiler   -g -std=c++17 -arch=native -x cu -c /home/visual/Documents/CUDA/bugs/src/kernel.cu -o CMakeFiles/bugs.dir/src/kernel.cu.o",
+  "file": "/home/visual/Documents/CUDA/bugs/src/kernel.cu",
+  "output": "CMakeFiles/bugs.dir/src/kernel.cu.o"
+}
+]
