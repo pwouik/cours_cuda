@@ -158,11 +158,8 @@ void cleanGPU()
 	if (centroidColors) { free(centroidColors); centroidColors = NULL; }
 }
 
-
 void exampleCPU()
 {
-	
-
 	for(unsigned int i = 0;i<nbPoints;i++){
 		float dmin = 1e99;
 		unsigned int n = 0;
@@ -198,6 +195,30 @@ void exampleCPU()
 			centroids[j].z = newCentroids[j].z / (float)newCentroidSize[j];
 		}
 	}
+}
+
+__global__ void assignmentGPU(int nbPoints,float4* points,float4* centroids,unsigned int* pointLabel,float4* pointColors,float4* centroidColors)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i>=nbPoints){
+		return;
+	}
+	float dmin = 1e99;
+	unsigned int n = 0;
+	for(unsigned int j = 0;j<CLUSTERS;j++){
+		float4 dist;
+		dist.x=points[i].x-centroids[j].x;
+		dist.y=points[i].y-centroids[j].y;
+		dist.z=points[i].z-centroids[j].z;
+		float distance = sqrtf(dist.x*dist.x + dist.y*dist.y + dist.z*dist.z);
+		if (distance < dmin)
+		{
+			dmin = distance;
+			n = j;
+		}
+	}
+	pointLabel[i] = n; // point i assigned to cluster n
+	pointColors[i] = centroidColors[n%CLUSTERS];
 }
 
 void calcClusters() {
