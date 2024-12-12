@@ -28,7 +28,7 @@ extern "C" {
 #define CPU_MODE 1
 #define GPU_MODE 2
 
-int nbPoints = 2 * 1024*1024 ;
+int nbPoints = 2 * 1024 * 102 ;
 #define CLUSTERS 128
 
 /* Globals */
@@ -95,8 +95,8 @@ float4 randomColor()
 
 void initCPU()
 {
-	float4* newCentroids = (float4*)malloc(CLUSTERS*sizeof(float4));
-	unsigned int* newCentroidSize = (unsigned int*)malloc(CLUSTERS*sizeof(unsigned int));
+	newCentroids = (float4*)malloc(CLUSTERS*sizeof(float4));
+	newCentroidSize = (unsigned int*)malloc(CLUSTERS*sizeof(unsigned int));
 
 	points = createRandomData(nbPoints, 1.0f);
 	pointColors = (float4*)malloc(nbPoints*sizeof(float4));
@@ -114,6 +114,7 @@ void initCPU()
 	{
 		pointLabel[i] = 0;
 	}
+
 }
 
 void cleanCPU()
@@ -145,6 +146,7 @@ void initGPU()
 	{
 		pointLabel[i] = 0;
 	}
+
 }
 
 void cleanGPU()
@@ -159,45 +161,47 @@ void cleanGPU()
 
 void exampleCPU()
 {
-	/*
+	
+
 	for(unsigned int i = 0;i<nbPoints;i++){
-		float dmin = 0;
+		float dmin = 1e99;
 		unsigned int n = 0;
 		for(unsigned int j = 0;j<CLUSTERS;j++){
-			float distance = sqrtf(points[i].x*points[i].x + points[i].y*points[i].y + points[i].z*points[i].z - centroids[j].x*centroids[j].x + centroids[j].y*centroids[j].y + centroids[j].z*centroids[j].z);
+			float4 dist;
+			dist.x=points[i].x-centroids[j].x;
+			dist.y=points[i].y-centroids[j].y;
+			dist.z=points[i].z-centroids[j].z;
+			float distance = sqrtf(dist.x*dist.x + dist.y*dist.y + dist.z*dist.z);
 			if (distance < dmin)
+			{
 				dmin = distance;
 				n = j;
+			}
 		}
 		pointLabel[i] = n; // point i assigned to cluster n
+		pointColors[i] = centroidColors[n%CLUSTERS];
 	}
-	// phase 2 (“reduction”): recompute centroids
 	for(unsigned int j = 0;j<CLUSTERS;j++){
-		newCentroids[j] = make_float4(0.0f,0.0f,0.0f,0.0f);
+		newCentroids[j].x = 0.0f;
+		newCentroids[j].y = 0.0f;
+		newCentroids[j].z = 0.0f;
 		newCentroidSize[j] = 0;
 		for(unsigned int i = 0;i<nbPoints;i++){
 			newCentroids[pointLabel[i]].x = newCentroids[pointLabel[i]].x + points[i].x;
 			newCentroids[pointLabel[i]].y = newCentroids[pointLabel[i]].y + points[i].y;
 			newCentroids[pointLabel[i]].z = newCentroids[pointLabel[i]].z + points[i].z;
 			newCentroidSize[pointLabel[i]]++;
-			for(unsigned int j = 0;j<CLUSTERS;j++){
-				centroids[j].x = newCentroids[j].x / (float)newCentroidSize[j];
-				centroids[j].y = newCentroids[j].y / (float)newCentroidSize[j];
-				centroids[j].z = newCentroids[j].z / (float)newCentroidSize[j];
-			}
 		}
-	}*/
-
-	// your kmeans algorithm here
-	int i;
-	for (i = 0; i<nbPoints; i++)
-	{
-		pointLabel[i] = i%CLUSTERS;
-		pointColors[i] = centroidColors[i%CLUSTERS];
+		for(unsigned int j = 0;j<CLUSTERS;j++){
+			centroids[j].x = newCentroids[j].x / (float)newCentroidSize[j];
+			centroids[j].y = newCentroids[j].y / (float)newCentroidSize[j];
+			centroids[j].z = newCentroids[j].z / (float)newCentroidSize[j];
+		}
 	}
 }
 
 void calcClusters() {
+
 	frame++;
 	int timecur = glutGet(GLUT_ELAPSED_TIME);
 
@@ -230,10 +234,11 @@ void idleKmeans()
 
 void renderKmeans(void)
 {
+
 	calcClusters();
 	cameraApply();
 
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glPointSize(1.0f);
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_COLOR_ARRAY);
