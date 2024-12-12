@@ -1,18 +1,24 @@
 cmake_minimum_required(VERSION 3.5.1)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
-project(raytracing)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread")
-file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cc")
-file(GLOB gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu")
 
+
+project(run)
+file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.c")
+file(GLOB gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     # Modern CMake
 enable_language("CUDA")
-add_executable(raytracing
+add_executable(run
     ${cpu_source_files} ${gpu_source_files})
 find_package(OpenGL REQUIRED)
+
+set(GLUT_INCLUDE_DIR "C:/Program Files (x86)/freeglut/include")
+set(OPENGL_LIBRARY_DIR "C:/Program Files (x86)/freeglut/lib")
 find_package(GLUT REQUIRED)
 include_directories( ${OPENGL_INCLUDE_DIRS}  ${GLUT_INCLUDE_DIRS} )
 
-target_link_libraries(raytracing ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} )
-target_link_options(raytracing PRIVATE -lGL -lglut -lGLU -lGLEW)
+target_link_libraries(run ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} )
+target_link_options(run PRIVATE -lGL -lglut -lGLU -lGLEW)
+
+set_property(TARGET run PROPERTY CUDA_ARCHITECTURES native)
