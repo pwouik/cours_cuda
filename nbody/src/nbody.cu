@@ -169,7 +169,6 @@ __global__ void exampleGPU(float4* pos,float4* vel,float* mass,int nbBodies)
 	float4 mpos = pos[i];
 	float mmass = mass[i];
 	float4 macc = make_float4(0.0,0.0,0.0,0.0);
-
 	
 	for(int bi = 0;bi<blockDim.x;bi++)
 	{

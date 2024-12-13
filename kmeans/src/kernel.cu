@@ -25,11 +25,16 @@ extern "C" {
 #define FPS_UPDATE 200 
 #define TITLE "K-means"
 
-#define CPU_MODE 1
-#define GPU_MODE 2
+enum {
+	CPU_MODE = 1,
+	GPU_MODE1,
+	GPU_MODE2
+};
 
-int nbPoints = 2 * 1024 * 102 ;
+
+int nbPoints = 2 * 1024 * 1024 ;
 #define CLUSTERS 128
+#define BLOCK_SIZE 32
 
 /* Globals */
 
@@ -39,6 +44,9 @@ int timebase = 0;
 
 float4 *points = NULL, *centroids = NULL, *newCentroids = NULL, *pointColors = NULL, *centroidColors = NULL;
 unsigned int* pointLabel = NULL, *newCentroidSize = NULL;
+
+float4 *d_points = NULL, *d_centroids = NULL, *d_pointColors = NULL, *d_centroidColors = NULL;
+unsigned int* d_pointLabel = NULL;
 
 float4* createRandomData(int n, float d)
 {
@@ -130,12 +138,16 @@ void cleanCPU()
 
 void initGPU()
 {
-	points = createRandomData(nbPoints, 1.0f);
-	pointColors = (float4*)malloc(nbPoints*sizeof(float4));
-	pointLabel = (unsigned int*)malloc(nbPoints*sizeof(unsigned int));
+	
+	cudaMallocHost(&newCentroids, CLUSTERS*sizeof(float4));
+	cudaMallocHost(&newCentroidSize,CLUSTERS*sizeof(unsigned int));
 
-	centroids = (float4*)malloc(CLUSTERS*sizeof(float4));
-	centroidColors = (float4*)malloc(CLUSTERS*sizeof(float4));
+	points = createRandomData(nbPoints, 1.0f);
+	cudaMallocHost(&pointColors,nbPoints*sizeof(float4));
+	cudaMallocHost(&pointLabel,nbPoints*sizeof(unsigned int));
+
+	cudaMallocHost(&centroids,CLUSTERS*sizeof(float4));
+	cudaMallocHost(&centroidColors,CLUSTERS*sizeof(float4));
 	int i;
 	for (i = 0; i<CLUSTERS; i++)
 	{
@@ -146,20 +158,36 @@ void initGPU()
 	{
 		pointLabel[i] = 0;
 	}
+	cudaMalloc(&d_points,nbPoints*sizeof(float4));
+	cudaMalloc(&d_pointColors,nbPoints*sizeof(float4));
+	cudaMalloc(&d_pointLabel,nbPoints*sizeof(unsigned int));
+	cudaMalloc(&d_centroids,CLUSTERS*sizeof(float4));
+	cudaMalloc(&d_centroidColors,CLUSTERS*sizeof(float4));
+	cudaMemcpy(d_points,points,nbPoints*sizeof(float4),cudaMemcpyHostToDevice);
+	cudaMemcpy(d_centroids,centroids,CLUSTERS*sizeof(float4),cudaMemcpyHostToDevice);
+	cudaMemcpy(d_centroidColors,centroidColors,CLUSTERS*sizeof(float4),cudaMemcpyHostToDevice);
 
 }
 
 void cleanGPU()
 {
 	if (points) { free(points);	points = NULL; }
-	if (pointLabel) { free(pointLabel);	pointLabel = NULL; }
-	if (pointColors) { free(pointColors); pointColors = NULL; }
-	if (centroids) { free(centroids); centroids = NULL; }
-	if (centroidColors) { free(centroidColors); centroidColors = NULL; }
+	if (pointLabel) { cudaFreeHost(pointLabel);	pointLabel = NULL; }
+	if (pointColors) { cudaFreeHost(pointColors); pointColors = NULL; }
+	if (centroids) { cudaFreeHost(centroids); centroids = NULL; }
+	if (centroidColors) { cudaFreeHost(centroidColors); centroidColors = NULL; }
+	if (newCentroidSize) { cudaFreeHost(newCentroidSize); newCentroidSize = NULL; }
+	if (newCentroids) { cudaFreeHost(newCentroids); newCentroids = NULL; }
+
+	
+	if (d_points) { cudaFree(d_points);	d_points = NULL; }
+	if (d_pointLabel) { cudaFree(d_pointLabel);	d_pointLabel = NULL; }
+	if (d_pointColors) { cudaFree(d_pointColors); d_pointColors = NULL; }
+	if (d_centroids) { cudaFree(d_centroids); d_centroids = NULL; }
+	if (d_centroidColors) { cudaFree(d_centroidColors); d_centroidColors = NULL; }
 }
 
-void exampleCPU()
-{
+void assignmentCPU(){
 	for(unsigned int i = 0;i<nbPoints;i++){
 		float dmin = 1e99;
 		unsigned int n = 0;
@@ -178,23 +206,31 @@ void exampleCPU()
 		pointLabel[i] = n; // point i assigned to cluster n
 		pointColors[i] = centroidColors[n%CLUSTERS];
 	}
+}
+void reduceCPU(){
 	for(unsigned int j = 0;j<CLUSTERS;j++){
 		newCentroids[j].x = 0.0f;
 		newCentroids[j].y = 0.0f;
 		newCentroids[j].z = 0.0f;
 		newCentroidSize[j] = 0;
-		for(unsigned int i = 0;i<nbPoints;i++){
-			newCentroids[pointLabel[i]].x = newCentroids[pointLabel[i]].x + points[i].x;
-			newCentroids[pointLabel[i]].y = newCentroids[pointLabel[i]].y + points[i].y;
-			newCentroids[pointLabel[i]].z = newCentroids[pointLabel[i]].z + points[i].z;
-			newCentroidSize[pointLabel[i]]++;
-		}
-		for(unsigned int j = 0;j<CLUSTERS;j++){
-			centroids[j].x = newCentroids[j].x / (float)newCentroidSize[j];
-			centroids[j].y = newCentroids[j].y / (float)newCentroidSize[j];
-			centroids[j].z = newCentroids[j].z / (float)newCentroidSize[j];
-		}
 	}
+	for(unsigned int i = 0;i<nbPoints;i++){
+		newCentroids[pointLabel[i]].x += points[i].x;
+		newCentroids[pointLabel[i]].y += points[i].y;
+		newCentroids[pointLabel[i]].z += points[i].z;
+		newCentroidSize[pointLabel[i]]++;
+	}
+	for(unsigned int j = 0;j<CLUSTERS;j++){
+		centroids[j].x = newCentroids[j].x / (float)newCentroidSize[j];
+		centroids[j].y = newCentroids[j].y / (float)newCentroidSize[j];
+		centroids[j].z = newCentroids[j].z / (float)newCentroidSize[j];
+	}
+}
+
+void exampleCPU()
+{
+	assignmentCPU();
+	reduceCPU();
 }
 
 __global__ void assignmentGPU(int nbPoints,float4* points,float4* centroids,unsigned int* pointLabel,float4* pointColors,float4* centroidColors)
@@ -203,7 +239,7 @@ __global__ void assignmentGPU(int nbPoints,float4* points,float4* centroids,unsi
 	if(i>=nbPoints){
 		return;
 	}
-	float dmin = 1e99;
+	float dmin = FLT_MAX;
 	unsigned int n = 0;
 	for(unsigned int j = 0;j<CLUSTERS;j++){
 		float4 dist;
@@ -221,6 +257,48 @@ __global__ void assignmentGPU(int nbPoints,float4* points,float4* centroids,unsi
 	pointColors[i] = centroidColors[n%CLUSTERS];
 }
 
+__global__ void reduceGPU(int nbPoints,float4* points,float4* centroids,unsigned int* pointLabel)
+{
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+	if(j>=CLUSTERS){
+		return;
+	}
+	float4 newCentroids = make_float4(0.0f,0.0f,0.0f,0.0f);
+	unsigned int newCentroidSize = 0;
+	for(unsigned int i = 0;i<nbPoints;i++){
+		if(pointLabel[i]==j){
+			newCentroids.x += points[i].x;
+			newCentroids.y += points[i].y;
+			newCentroids.z += points[i].z;
+			newCentroidSize++;
+		}
+	}
+	centroids[j].x = newCentroids.x / (float)newCentroidSize;
+	centroids[j].y = newCentroids.y / (float)newCentroidSize;
+	centroids[j].z = newCentroids.z / (float)newCentroidSize;
+}
+
+void exampleGPU1(){
+	cudaMemcpy(d_centroids,centroids,CLUSTERS*sizeof(float4),cudaMemcpyHostToDevice);
+	assignmentGPU<<<(nbPoints-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(nbPoints,d_points,d_centroids,d_pointLabel,d_pointColors,d_centroidColors);
+	cudaDeviceSynchronize();
+	cudaMemcpy(pointLabel,d_pointLabel,nbPoints*sizeof(unsigned int),cudaMemcpyDeviceToHost);
+	cudaMemcpy(pointColors,d_pointColors,nbPoints*sizeof(float4),cudaMemcpyDeviceToHost);
+	reduceCPU();
+}
+
+
+void exampleGPU2(){
+	cudaDeviceSynchronize();
+	assignmentGPU<<<(nbPoints-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(nbPoints,d_points,d_centroids,d_pointLabel,d_pointColors,d_centroidColors);
+	cudaDeviceSynchronize();
+	reduceGPU<<<(CLUSTERS-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(nbPoints,d_points,d_centroids,d_pointLabel);
+	cudaDeviceSynchronize();
+	cudaMemcpy(centroids,d_centroids,CLUSTERS*sizeof(float4),cudaMemcpyDeviceToHost);
+	cudaMemcpy(pointColors,d_pointColors,nbPoints*sizeof(float4),cudaMemcpyDeviceToHost);
+	cudaMemcpy(points,d_points,nbPoints*sizeof(float4),cudaMemcpyDeviceToHost);
+}
+
 void calcClusters() {
 
 	frame++;
@@ -232,7 +310,7 @@ void calcClusters() {
 		switch (mode)
 		{
 		case CPU_MODE: m = "CPU"; break;
-		case GPU_MODE: m = "GPU"; break;
+		case GPU_MODE1: m = "GPU"; break;
 		}
 		sprintf(t, "%s: %s, %i points, %.2f FPS", TITLE, m, nbPoints, frame * 1000 / (float)(timecur - timebase));
 		glutSetWindowTitle(t);
@@ -243,7 +321,8 @@ void calcClusters() {
 	switch (mode)
 	{
 	case CPU_MODE: exampleCPU(); break;
-	case GPU_MODE: exampleCPU(); break;
+	case GPU_MODE1: exampleGPU1(); break;
+	case GPU_MODE2: exampleGPU2(); break;
 	}
 }
 
@@ -284,16 +363,20 @@ void clean()
 	switch (mode)
 	{
 	case CPU_MODE: cleanCPU(); break;
-	case GPU_MODE: cleanGPU(); break;
+	case GPU_MODE1: cleanGPU(); break;
+	case GPU_MODE2: cleanGPU(); break;
 	}
 }
 
 void init()
 {
+	
+	srand(456);
 	switch (mode)
 	{
 	case CPU_MODE: initCPU(); break;
-	case GPU_MODE: initGPU(); break;
+	case GPU_MODE1: initGPU(); break;
+	case GPU_MODE2: initGPU(); break;
 	}
 
 }
@@ -308,7 +391,8 @@ void toggleMode(int m)
 void processNormalKeys(unsigned char key, int x, int y) {
 	if (key == 27) exit(0);
 	else if (key == '1') toggleMode(CPU_MODE);
-	else if (key == '2') toggleMode(GPU_MODE);
+	else if (key == '2') toggleMode(GPU_MODE1);
+	else if (key == '3') toggleMode(GPU_MODE2);
 }
 
 void processSpecialKeys(int key, int x, int y) {
