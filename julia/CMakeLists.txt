@@ -1,19 +1,24 @@
 cmake_minimum_required(VERSION 3.5.1)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
-project(julia)
 
 
-file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cc")
+project(run)
+file(GLOB cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.c")
 file(GLOB gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu")
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
     # Modern CMake
 enable_language("CUDA")
-add_executable(julia
+add_executable(run
     ${cpu_source_files} ${gpu_source_files})
 find_package(OpenGL REQUIRED)
+
+set(GLUT_INCLUDE_DIR "C:/Program Files (x86)/freeglut/include")
+set(OPENGL_LIBRARY_DIR "C:/Program Files (x86)/freeglut/lib")
 find_package(GLUT REQUIRED)
 include_directories( ${OPENGL_INCLUDE_DIRS}  ${GLUT_INCLUDE_DIRS} )
 
-target_link_libraries(julia ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} )
-target_link_options(julia PRIVATE -lGL -lglut -lGLU -lGLEW)
+target_link_libraries(run ${OPENGL_LIBRARIES} ${GLUT_LIBRARY} )
+target_link_options(run PRIVATE -lGL -lglut -lGLU -lGLEW)
+
+set_property(TARGET run PROPERTY CUDA_ARCHITECTURES native)

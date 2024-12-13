@@ -46,7 +46,7 @@ float4 *points = NULL, *centroids = NULL, *newCentroids = NULL, *pointColors = N
 unsigned int* pointLabel = NULL, *newCentroidSize = NULL;
 
 float4 *d_points = NULL, *d_centroids = NULL, *d_pointColors = NULL, *d_centroidColors = NULL;
-unsigned int* d_pointLabel = NULL;
+unsigned int* d_pointLabel = NULL, *d_newCentroidSize = NULL;
 
 float4* createRandomData(int n, float d)
 {
@@ -162,6 +162,7 @@ void initGPU()
 	cudaMalloc(&d_pointColors,nbPoints*sizeof(float4));
 	cudaMalloc(&d_pointLabel,nbPoints*sizeof(unsigned int));
 	cudaMalloc(&d_centroids,CLUSTERS*sizeof(float4));
+	cudaMalloc(&d_newCentroidSize,CLUSTERS*sizeof(unsigned int));
 	cudaMalloc(&d_centroidColors,CLUSTERS*sizeof(float4));
 	cudaMemcpy(d_points,points,nbPoints*sizeof(float4),cudaMemcpyHostToDevice);
 	cudaMemcpy(d_centroids,centroids,CLUSTERS*sizeof(float4),cudaMemcpyHostToDevice);
@@ -257,25 +258,28 @@ __global__ void assignmentGPU(int nbPoints,float4* points,float4* centroids,unsi
 	pointColors[i] = centroidColors[n%CLUSTERS];
 }
 
-__global__ void reduceGPU(int nbPoints,float4* points,float4* centroids,unsigned int* pointLabel)
+__global__ void reduceGPU(int nbPoints,float4* points,float4* centroids,unsigned int* pointLabel,unsigned int* newCentroidSize)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i>=nbPoints){
+		return;
+	}
+	unsigned int j = pointLabel[i];
+	atomicAdd(&centroids[j].x,points[i].x);
+	atomicAdd(&centroids[j].y,points[i].y);
+	atomicAdd(&centroids[j].z,points[i].z);
+	atomicAdd(&newCentroidSize[j],1);
+}
+
+__global__ void normalizeGPU(float4* centroids,unsigned int* newCentroidSize)
 {
     int j = blockIdx.x * blockDim.x + threadIdx.x;
 	if(j>=CLUSTERS){
 		return;
 	}
-	float4 newCentroids = make_float4(0.0f,0.0f,0.0f,0.0f);
-	unsigned int newCentroidSize = 0;
-	for(unsigned int i = 0;i<nbPoints;i++){
-		if(pointLabel[i]==j){
-			newCentroids.x += points[i].x;
-			newCentroids.y += points[i].y;
-			newCentroids.z += points[i].z;
-			newCentroidSize++;
-		}
-	}
-	centroids[j].x = newCentroids.x / (float)newCentroidSize;
-	centroids[j].y = newCentroids.y / (float)newCentroidSize;
-	centroids[j].z = newCentroids.z / (float)newCentroidSize;
+	centroids[j].x/=newCentroidSize[j];
+	centroids[j].y/=newCentroidSize[j];
+	centroids[j].z/=newCentroidSize[j];
 }
 
 void exampleGPU1(){
@@ -292,7 +296,9 @@ void exampleGPU2(){
 	cudaDeviceSynchronize();
 	assignmentGPU<<<(nbPoints-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(nbPoints,d_points,d_centroids,d_pointLabel,d_pointColors,d_centroidColors);
 	cudaDeviceSynchronize();
-	reduceGPU<<<(CLUSTERS-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(nbPoints,d_points,d_centroids,d_pointLabel);
+	cudaMemset(d_newCentroidSize,0,CLUSTERS*sizeof(unsigned int));
+	reduceGPU<<<(nbPoints-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(nbPoints,d_points,d_centroids,d_pointLabel,d_newCentroidSize);
+	normalizeGPU<<<(CLUSTERS-1)/BLOCK_SIZE+1,BLOCK_SIZE>>>(d_centroids,d_newCentroidSize);
 	cudaDeviceSynchronize();
 	cudaMemcpy(centroids,d_centroids,CLUSTERS*sizeof(float4),cudaMemcpyDeviceToHost);
 	cudaMemcpy(pointColors,d_pointColors,nbPoints*sizeof(float4),cudaMemcpyDeviceToHost);
